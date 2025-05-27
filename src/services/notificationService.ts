@@ -33,11 +33,22 @@ class NotificationService {
   }
 
   // Отправка уведомления в Telegram
-  private async sendTelegramNotification(telegramId: number, message: string) {
+  private async sendTelegramNotification(telegramId: number, message: string, buttonText: string) {
+    const webAppUrl = process.env.WEBAPP_URL;
     try {
       await bot.sendMessage(telegramId, message, {
         parse_mode: 'HTML',
-        disable_web_page_preview: true
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: buttonText,
+                web_app: { url: webAppUrl },
+              },
+            ],
+          ],
+        },
       });
       
       console.log(`✅ Telegram notification sent to ${telegramId}`);
@@ -52,12 +63,13 @@ class NotificationService {
 
   // Уведомление о лайке
   async notifyLike(fromTelegramId: number, toTelegramId: number) {
-    const fromUser = await User.findOne({ telegramId: fromTelegramId });
-    const toUser = await User.findOne({ telegramId: toTelegramId });
-    
+    const [fromUser, toUser] = await Promise.all([
+      User.findOne({ telegramId: fromTelegramId }),
+      User.findOne({ telegramId: toTelegramId })
+    ]);
     if (!fromUser || !toUser) return;
 
-    const message = `💖 ${fromUser.username} поставил(а) вам лайк!`;
+    const message = 'лайкнул(а) вашу карточку';
     
     await this.createNotification(
       toTelegramId,
@@ -66,17 +78,22 @@ class NotificationService {
       { fromUserId: fromUser._id }
     );
 
-    await this.sendTelegramNotification(toUser.telegramId, message);
+    await this.sendTelegramNotification(
+      toUser.telegramId,
+      `❤️ ${fromUser.firstName} ${message}`,
+      "Посмотреть профиль"
+    );
   }
 
   // Уведомление о суперлайке
   async notifySuperLike(fromTelegramId: number, toTelegramId: number) {
-    const fromUser = await User.findOne({ telegramId: fromTelegramId });
-    const toUser = await User.findOne({ telegramId: toTelegramId });
-    
+    const [fromUser, toUser] = await Promise.all([
+      User.findOne({ telegramId: fromTelegramId }),
+      User.findOne({ telegramId: toTelegramId })
+    ]);
     if (!fromUser || !toUser) return;
 
-    const message = `⭐ ${fromUser.username} поставил(а) вам суперлайк!`;
+    const message = 'суперлайкнул(а) вашу карточку';
     
     await this.createNotification(
       toTelegramId,
@@ -85,7 +102,11 @@ class NotificationService {
       { fromUserId: fromUser._id }
     );
 
-    await this.sendTelegramNotification(toUser.telegramId, message);
+    await this.sendTelegramNotification(
+      toUser.telegramId,
+      `⭐ ${fromUser.firstName} ${message}`,
+      "Посмотреть профиль"
+    );
   }
 
   // Уведомление о отправке на модерацию
@@ -93,7 +114,7 @@ class NotificationService {
     const user = await User.findOne({ telegramId });
     if (!user) return;
 
-    const message = '📝 Ваша карточка отправлена на модерацию';
+    const message = 'отправлена на модерацию';
     
     await this.createNotification(
       telegramId,
@@ -101,7 +122,7 @@ class NotificationService {
       message
     );
 
-    await this.sendTelegramNotification(user.telegramId, message);
+    await this.sendTelegramNotification(user.telegramId, "📝 Ваша карточка " + message, "Проверить статус модерации");
   }
 
   // Уведомление об одобрении карточки
@@ -109,7 +130,7 @@ class NotificationService {
     const user = await User.findOne({ telegramId });
     if (!user) return;
 
-    const message = '✅ Ваша карточка прошла модерацию и теперь видна другим пользователям';
+    const message = 'прошла модерацию.';
     
     await this.createNotification(
       telegramId,
@@ -117,7 +138,7 @@ class NotificationService {
       message
     );
 
-    await this.sendTelegramNotification(user.telegramId, message);
+    await this.sendTelegramNotification(user.telegramId, "✅ Ваша карточка " + message, "Начать поиск тиммейтов");
   }
 
   // Уведомление об отклонении карточки
@@ -125,7 +146,7 @@ class NotificationService {
     const user = await User.findOne({ telegramId });
     if (!user) return;
 
-    const message = `❌ Ваша карточка не прошла модерацию.\nПричина: ${comment}`;
+    const message = `не прошла модерацию, создайте заново`;
     
     await this.createNotification(
       telegramId,
@@ -134,7 +155,23 @@ class NotificationService {
       { moderationComment: comment }
     );
 
-    await this.sendTelegramNotification(user.telegramId, message);
+    await this.sendTelegramNotification(user.telegramId, "❌ Ваша карточка " + message, "Создать карточку заново");
+  }
+
+  // Уведомление об удалении карточки
+  async notifyProfileDeleted(telegramId: number) {
+    const user = await User.findOne({ telegramId });
+    if (!user) return;
+
+    const message = 'была удалена';
+    
+    await this.createNotification(
+      telegramId,
+      NotificationType.PROFILE_DELETED,
+      message
+    );
+
+    await this.sendTelegramNotification(user.telegramId, "🗑 Ваша карточка " + message, "Создайте карточку заново");
   }
 
   // Получение уведомлений пользователя

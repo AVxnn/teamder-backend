@@ -58,7 +58,10 @@ router.post('/telegram-webapp', async (req: Request, res: Response): Promise<voi
       createdAt: user.createdAt,
       profile: user.profile,
       likesGiven: user.likesGiven,
-      likesReceived: user.likesReceived
+      likesReceived: user.likesReceived,
+      likesLimit: user.likesLimit,
+      stars: user.stars,
+      superLikesLimit: user.superLikesLimit
     };
 
     res.json({

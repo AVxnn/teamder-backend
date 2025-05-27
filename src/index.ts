@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import profileRoutes from "./routes/profile"
 import moderationRoutes from "./routes/moderation"
 import notificationRoutes from "./routes/notifications"
+import recommendationRoutes from "./routes/recommendations"
 import cors from 'cors';
 import mongoose from 'mongoose';
 import paymentRoutes from './routes/payments';
@@ -65,6 +66,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/payments', paymentRoutes);
 
 app.listen(port, () => {

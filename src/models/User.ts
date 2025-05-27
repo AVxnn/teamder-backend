@@ -11,7 +11,16 @@ export enum UserRole {
 export enum ModerationStatus {
   PENDING = 'pending',
   APPROVED = 'approved',
-  REJECTED = 'rejected'
+  REJECTED = 'rejected',
+  DELETED = 'deleted'
+}
+
+// Определяем интерфейс для лайка
+interface Like {
+  userId: mongoose.Types.ObjectId;
+  type: 'regular' | 'super';
+  date: Date;
+  isMutual: boolean;
 }
 
 const UserSchema = new mongoose.Schema({
@@ -50,9 +59,37 @@ const UserSchema = new mongoose.Schema({
     moderatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
 
-  likesGiven: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  likesReceived: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // Лайки
+  likesGiven: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    type: { type: String, enum: ['regular', 'super'] },
+    date: { type: Date, default: Date.now },
+    isMutual: { type: Boolean, default: false }
+  }],
+  likesReceived: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    type: { type: String, enum: ['regular', 'super'] },
+    date: { type: Date, default: Date.now },
+    isMutual: { type: Boolean, default: false }
+  }],
+  
   stars: { type: Number, default: 0 },
+  
+  // Система лимитов лайков
+  likesLimit: {
+    dailyLimit: { type: Number, default: 20 },
+    likesUsedToday: { type: Number, default: 0 },
+    lastResetDate: { type: Date, default: Date.now },
+    extraLikes: { type: Number, default: 0 } // Дополнительные лайки, купленные за звезды
+  },
+
+  // Система лимитов суперлайков
+  superLikesLimit: {
+    dailyLimit: { type: Number, default: 3 }, // Меньше суперлайков в день
+    superLikesUsedToday: { type: Number, default: 0 },
+    lastResetDate: { type: Date, default: Date.now },
+    extraSuperLikes: { type: Number, default: 0 } // Дополнительные суперлайки, купленные за звезды
+  }
 });
 
 export default mongoose.model('User', UserSchema);

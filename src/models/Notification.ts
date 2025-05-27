@@ -5,7 +5,8 @@ export enum NotificationType {
   SUPER_LIKE = 'superlike',
   PROFILE_PENDING = 'waiting',
   PROFILE_APPROVED = 'moderation-success',
-  PROFILE_REJECTED = 'moderation-fail'
+  PROFILE_REJECTED = 'moderation-fail',
+  PROFILE_DELETED = 'profile-deleted'
 }
 
 const NotificationSchema = new mongoose.Schema({
