@@ -37,63 +37,76 @@ router.post('/pending', isAdmin, async (req: Request, res: Response): Promise<vo
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 // Модерировать карточку
 router.post('/moderate', isAdmin, async (req: Request, res: Response): Promise<void> => {
-  const { targetTelegramId, status, comment } = req.body;
-  const { telegramId: moderatorId } = req.body; // ID модератора
+  const { userId, status, comment, telegramId } = req.body;
 
-  if (!targetTelegramId || !status || !Object.values(ModerationStatus).includes(status)) {
-    res.status(400).json({ error: 'Invalid request parameters' });
-    return;
-  }
+  // Валидация входных данных
+  // if (!telegramId || !status || !Object.values(ModerationStatus).includes(status)) {
+  //   res.status(400).json({ 
+  //     success: false,
+  //     error: 'Invalid request parameters',
+  //     required: {
+  //       telegramId: 'number',
+  //       status: 'APPROVED | REJECTED | PENDING',
+  //       comment: 'string (optional)'
+  //     }
+  //   });
+  //   return;
+  // }
 
   try {
-    const user = await User.findOne({ telegramId: targetTelegramId });
+    // Находим пользователя и модератора
+    const [user, moderator] = await Promise.all([
+      User.findOne({ telegramId: userId }),
+      User.findOne({ telegramId: telegramId })
+    ]);
+
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ success: false, error: 'User not found' });
       return;
     }
 
-    const moderator = await User.findOne({ telegramId: moderatorId });
     if (!moderator) {
-      res.status(404).json({ error: 'Moderator not found' });
+      res.status(404).json({ success: false, error: 'Moderator not found' });
       return;
     }
 
-    // Инициализируем профиль, если его нет
-    if (!user.profile) {
-      user.profile = {
-        moderationStatus: ModerationStatus.PENDING,
-        moderationComment: '',
-        moderatedAt: null,
-        moderatedBy: null
-      };
-    }
-
-    // Обновляем статус модерации
-    user.profile.moderationStatus = status;
-    user.profile.moderationComment = comment;
-    user.profile.moderatedAt = new Date();
-    user.profile.moderatedBy = moderator._id;
+    // Инициализируем или обновляем профиль
+    user.profile = {
+      ...user.profile,
+      moderationStatus: status,
+      moderationComment: comment || '',
+      moderatedAt: new Date(),
+      moderatedBy: moderator._id
+    };
 
     await user.save();
 
-    // Отправляем уведомление о результате модерации
-    if (status === ModerationStatus.APPROVED) {
-      await notificationService.notifyProfileApproved(user.telegramId);
-    } else if (status === ModerationStatus.REJECTED) {
-      await notificationService.notifyProfileRejected(user.telegramId, comment || '');
+    // Отправляем уведомление
+    try {
+      if (status === ModerationStatus.APPROVED) {
+        await notificationService.notifyProfileApproved(user.telegramId);
+      } else if (status === ModerationStatus.REJECTED) {
+        await notificationService.notifyProfileRejected(user.telegramId, comment || '');
+      }
+    } catch (notifyError) {
+      console.error('Failed to send notification:', notifyError);
+      // Продолжаем выполнение даже если уведомление не отправилось
     }
 
     res.json({ 
       success: true, 
-      message: `Profile ${status}`,
+      message: `Profile ${status.toLowerCase()}`,
       profile: user.profile 
     });
   } catch (error) {
     console.error('❌ Error moderating profile:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
