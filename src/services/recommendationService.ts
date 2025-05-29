@@ -1,5 +1,6 @@
-import User, { ModerationStatus } from '../models/User';
-import notificationService from './notificationService';
+import User, { ModerationStatus, DotaRole } from "../models/User";
+import notificationService from "./notificationService";
+import Like, { LikeType } from "../models/Like";
 
 interface RecommendationFilters {
   minRating?: number;
@@ -7,6 +8,8 @@ interface RecommendationFilters {
   minGamesPlayed?: number;
   maxGamesPlayed?: number;
   lookingFor?: string;
+  preferredHeroes?: string[];
+  preferredRoles?: string[];
 }
 
 interface LikesLimit {
@@ -31,13 +34,13 @@ class RecommendationService {
         dailyLimit: 20,
         likesUsedToday: 0,
         extraLikes: 0,
-        lastResetDate: new Date()
+        lastResetDate: new Date(),
       };
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const lastReset = new Date(user.likesLimit.lastResetDate);
     lastReset.setHours(0, 0, 0, 0);
 
@@ -55,13 +58,13 @@ class RecommendationService {
         dailyLimit: 3,
         superLikesUsedToday: 0,
         extraSuperLikes: 0,
-        lastResetDate: new Date()
+        lastResetDate: new Date(),
       };
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const lastReset = new Date(user.superLikesLimit.lastResetDate);
     lastReset.setHours(0, 0, 0, 0);
 
@@ -75,37 +78,43 @@ class RecommendationService {
   // Проверка доступности лайков
   private async checkLikesAvailability(user: any): Promise<boolean> {
     await this.checkAndResetDailyLimit(user);
-    
+
     if (!user.likesLimit) {
       return false;
     }
 
-    const totalAvailableLikes = user.likesLimit.dailyLimit + user.likesLimit.extraLikes;
+    const totalAvailableLikes =
+      user.likesLimit.dailyLimit + user.likesLimit.extraLikes;
     return user.likesLimit.likesUsedToday < totalAvailableLikes;
   }
 
   // Проверка доступности суперлайков
   private async checkSuperLikesAvailability(user: any): Promise<boolean> {
     await this.checkAndResetSuperLikesLimit(user);
-    
+
     if (!user.superLikesLimit) {
       return false;
     }
 
-    const totalAvailableSuperLikes = user.superLikesLimit.dailyLimit + user.superLikesLimit.extraSuperLikes;
+    const totalAvailableSuperLikes =
+      user.superLikesLimit.dailyLimit + user.superLikesLimit.extraSuperLikes;
     return user.superLikesLimit.superLikesUsedToday < totalAvailableSuperLikes;
   }
 
   // Покупка дополнительных лайков
-  async purchaseExtraLikes(telegramId: number, amount: number, starsCost: number) {
+  async purchaseExtraLikes(
+    telegramId: number,
+    amount: number,
+    starsCost: number
+  ) {
     try {
       const user = await User.findOne({ telegramId });
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       if (user.stars < starsCost) {
-        throw new Error('Not enough stars');
+        throw new Error("Not enough stars");
       }
 
       if (!user.likesLimit) {
@@ -113,7 +122,7 @@ class RecommendationService {
           dailyLimit: 20,
           likesUsedToday: 0,
           extraLikes: 0,
-          lastResetDate: new Date()
+          lastResetDate: new Date(),
         };
       }
 
@@ -125,24 +134,29 @@ class RecommendationService {
         success: true,
         message: `Successfully purchased ${amount} extra likes`,
         remainingStars: user.stars,
-        totalAvailableLikes: user.likesLimit.dailyLimit + user.likesLimit.extraLikes
+        totalAvailableLikes:
+          user.likesLimit.dailyLimit + user.likesLimit.extraLikes,
       };
     } catch (error) {
-      console.error('Error purchasing extra likes:', error);
+      console.error("Error purchasing extra likes:", error);
       throw error;
     }
   }
 
   // Покупка дополнительных суперлайков
-  async purchaseExtraSuperLikes(telegramId: number, amount: number, starsCost: number) {
+  async purchaseExtraSuperLikes(
+    telegramId: number,
+    amount: number,
+    starsCost: number
+  ) {
     try {
       const user = await User.findOne({ telegramId });
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       if (user.stars < starsCost) {
-        throw new Error('Not enough stars');
+        throw new Error("Not enough stars");
       }
 
       if (!user.superLikesLimit) {
@@ -150,7 +164,7 @@ class RecommendationService {
           dailyLimit: 3,
           superLikesUsedToday: 0,
           extraSuperLikes: 0,
-          lastResetDate: new Date()
+          lastResetDate: new Date(),
         };
       }
 
@@ -162,10 +176,12 @@ class RecommendationService {
         success: true,
         message: `Successfully purchased ${amount} extra super likes`,
         remainingStars: user.stars,
-        totalAvailableSuperLikes: user.superLikesLimit.dailyLimit + user.superLikesLimit.extraSuperLikes
+        totalAvailableSuperLikes:
+          user.superLikesLimit.dailyLimit +
+          user.superLikesLimit.extraSuperLikes,
       };
     } catch (error) {
-      console.error('Error purchasing extra super likes:', error);
+      console.error("Error purchasing extra super likes:", error);
       throw error;
     }
   }
@@ -175,98 +191,128 @@ class RecommendationService {
     try {
       const user = await User.findOne({ telegramId });
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       await this.checkAndResetDailyLimit(user);
       await this.checkAndResetSuperLikesLimit(user);
 
-      const likesInfo = !user.likesLimit ? {
-        dailyLimit: 20,
-        likesUsedToday: 0,
-        extraLikes: 0,
-        totalAvailableLikes: 20,
-        remainingLikes: 20
-      } : {
-        dailyLimit: user.likesLimit.dailyLimit,
-        likesUsedToday: user.likesLimit.likesUsedToday,
-        extraLikes: user.likesLimit.extraLikes,
-        totalAvailableLikes: user.likesLimit.dailyLimit + user.likesLimit.extraLikes,
-        remainingLikes: (user.likesLimit.dailyLimit + user.likesLimit.extraLikes) - user.likesLimit.likesUsedToday
-      };
+      const likesInfo = !user.likesLimit
+        ? {
+            dailyLimit: 20,
+            likesUsedToday: 0,
+            extraLikes: 0,
+            totalAvailableLikes: 20,
+            remainingLikes: 20,
+          }
+        : {
+            dailyLimit: user.likesLimit.dailyLimit,
+            likesUsedToday: user.likesLimit.likesUsedToday,
+            extraLikes: user.likesLimit.extraLikes,
+            totalAvailableLikes:
+              user.likesLimit.dailyLimit + user.likesLimit.extraLikes,
+            remainingLikes:
+              user.likesLimit.dailyLimit +
+              user.likesLimit.extraLikes -
+              user.likesLimit.likesUsedToday,
+          };
 
-      const superLikesInfo = !user.superLikesLimit ? {
-        dailyLimit: 3,
-        superLikesUsedToday: 0,
-        extraSuperLikes: 0,
-        totalAvailableSuperLikes: 3,
-        remainingSuperLikes: 3
-      } : {
-        dailyLimit: user.superLikesLimit.dailyLimit,
-        superLikesUsedToday: user.superLikesLimit.superLikesUsedToday,
-        extraSuperLikes: user.superLikesLimit.extraSuperLikes,
-        totalAvailableSuperLikes: user.superLikesLimit.dailyLimit + user.superLikesLimit.extraSuperLikes,
-        remainingSuperLikes: (user.superLikesLimit.dailyLimit + user.superLikesLimit.extraSuperLikes) - user.superLikesLimit.superLikesUsedToday
-      };
+      const superLikesInfo = !user.superLikesLimit
+        ? {
+            dailyLimit: 3,
+            superLikesUsedToday: 0,
+            extraSuperLikes: 0,
+            totalAvailableSuperLikes: 3,
+            remainingSuperLikes: 3,
+          }
+        : {
+            dailyLimit: user.superLikesLimit.dailyLimit,
+            superLikesUsedToday: user.superLikesLimit.superLikesUsedToday,
+            extraSuperLikes: user.superLikesLimit.extraSuperLikes,
+            totalAvailableSuperLikes:
+              user.superLikesLimit.dailyLimit +
+              user.superLikesLimit.extraSuperLikes,
+            remainingSuperLikes:
+              user.superLikesLimit.dailyLimit +
+              user.superLikesLimit.extraSuperLikes -
+              user.superLikesLimit.superLikesUsedToday,
+          };
 
       return {
         likes: likesInfo,
-        superLikes: superLikesInfo
+        superLikes: superLikesInfo,
       };
     } catch (error) {
-      console.error('Error getting likes info:', error);
+      console.error("Error getting likes info:", error);
       throw error;
     }
   }
 
   // Получение рекомендаций для пользователя
-  async getRecommendations(telegramId: number, filters: RecommendationFilters = {}) {
+  async getRecommendations(
+    telegramId: number,
+    filters: RecommendationFilters = {}
+  ) {
     try {
-      const user = await User.findOne({ telegramId });
-      if (!user || !user.profile) {
-        throw new Error('User not found or has no profile');
-      }
+      const {
+        minRating,
+        maxRating,
+        preferredHeroes = [],
+        preferredRoles = [],
+      } = filters;
 
-      // Получаем ID пользователей, которым уже поставлены лайки
-      const likedUserIds = user.likesGiven
-        .filter(like => like.userId) // Фильтруем null/undefined
-        .map(like => like.userId);
-
-      // Базовый запрос для поиска рекомендаций
+      // Базовый запрос для поиска пользователей
       const query: any = {
-        'profile.moderationStatus': ModerationStatus.APPROVED,
-        telegramId: { $ne: telegramId }
+        telegramId: { $ne: telegramId }, // Исключаем текущего пользователя
+        "profile.moderationStatus": "approved", // Только одобренные профили
       };
 
-      // Добавляем условие исключения только если есть лайки
-      if (likedUserIds.length > 0) {
-        query._id = { $nin: likedUserIds };
+      // Добавляем фильтр по рейтингу, если указан
+      if (minRating !== undefined || maxRating !== undefined) {
+        query["profile.rating"] = {};
+        if (minRating !== undefined) {
+          query["profile.rating"].$gte = minRating;
+        }
+        if (maxRating !== undefined) {
+          query["profile.rating"].$lte = maxRating;
+        }
       }
 
-      // Применяем фильтры
-      if (filters.minRating) {
-        query['profile.rating'] = { $gte: filters.minRating };
-      }
-      if (filters.maxRating) {
-        query['profile.rating'] = { ...query['profile.rating'], $lte: filters.maxRating };
-      }
-      if (filters.minGamesPlayed) {
-        query['profile.hoursPlayed'] = { $gte: filters.minGamesPlayed };
-      }
-      if (filters.maxGamesPlayed) {
-        query['profile.hoursPlayed'] = { ...query['profile.hoursPlayed'], $lte: filters.maxGamesPlayed };
-      }
-      if (filters.lookingFor) {
-        query['profile.lookingFor'] = filters.lookingFor;
+      // Добавляем фильтр по ролям, если они указаны
+      if (preferredRoles && preferredRoles.length > 0) {
+        query["profile.preferredRoles"] = {
+          $in: preferredRoles,
+        };
       }
 
-      const recommendations = await User.find(query)
-        .select('telegramId username firstName photoUrl profile')
-        .limit(20);
+      // Добавляем фильтр по героям, если они указаны
+      if (preferredHeroes && preferredHeroes.length > 0) {
+        query["profile.preferredHeroes.localized_name"] = {
+          $in: preferredHeroes.map((name) => new RegExp(`^${name}$`, "i")),
+        };
+      }
 
-      return recommendations;
+      console.log("Search query:", JSON.stringify(query, null, 2)); // Для отладки
+
+      // Получаем пользователей, соответствующих фильтрам
+      const users = await User.find(query)
+        .select("telegramId username firstName photoUrl profile role stars")
+        .limit(20); // Ограничиваем количество результатов
+
+      console.log("Found users:", users.length); // Для отладки
+
+      // Возвращаем только информацию о пользователях
+      return users.map((user) => ({
+        telegramId: user.telegramId,
+        username: user.username,
+        firstName: user.firstName,
+        photoUrl: user.photoUrl,
+        role: user.role,
+        stars: user.stars,
+        profile: user.profile,
+      }));
     } catch (error) {
-      console.error('Error getting recommendations:', error);
+      console.error("Error getting recommendations:", error);
       throw error;
     }
   }
@@ -276,54 +322,67 @@ class RecommendationService {
     try {
       const [fromUser, toUser] = await Promise.all([
         User.findOne({ telegramId: fromTelegramId }),
-        User.findOne({ telegramId: toTelegramId })
+        User.findOne({ telegramId: toTelegramId }),
       ]);
 
       if (!fromUser || !toUser) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
-      if (!fromUser.profile || fromUser.profile.moderationStatus !== ModerationStatus.APPROVED) {
-        throw new Error('Your profile must be approved to like others');
+      if (
+        !fromUser.profile ||
+        fromUser.profile.moderationStatus !== ModerationStatus.APPROVED
+      ) {
+        throw new Error("Your profile must be approved to like others");
       }
 
       // Проверяем, не лайкал ли уже этот пользователь
-      const hasLiked = fromUser.likesGiven.some(like => like.userId?.equals(toUser._id));
+      const hasLiked = fromUser.likesGiven.some((like) =>
+        like.userId?.equals(toUser._id)
+      );
       if (hasLiked) {
-        throw new Error('You have already liked this user');
+        throw new Error("You have already liked this user");
       }
 
       // Проверяем доступность лайков
       const canLike = await this.checkLikesAvailability(fromUser);
       if (!canLike) {
-        throw new Error('Daily likes limit reached. You can purchase extra likes for stars.');
+        throw new Error(
+          "Daily likes limit reached. You can purchase extra likes for stars."
+        );
       }
 
       // Проверяем взаимность
-      const isMutual = toUser.likesGiven.some(like => like.userId?.equals(fromUser._id));
+      const isMutual = toUser.likesGiven.some((like) =>
+        like.userId?.equals(fromUser._id)
+      );
 
       // Добавляем лайк
       fromUser.likesGiven.push({
         userId: toUser._id,
-        type: 'regular',
+        type: "regular",
         date: new Date(),
-        isMutual
+        isMutual,
       });
 
       toUser.likesReceived.push({
         userId: fromUser._id,
-        type: 'regular',
+        type: "regular",
         date: new Date(),
-        isMutual
+        isMutual,
       });
 
       // Если есть взаимность, обновляем статус у существующего лайка
       if (isMutual) {
-        const toUserLike = toUser.likesGiven.find(like => like.userId?.equals(fromUser._id));
+        const toUserLike = toUser.likesGiven.find((like) =>
+          like.userId?.equals(fromUser._id)
+        );
         if (toUserLike) {
           toUserLike.isMutual = true;
         }
-        const fromUserLike = fromUser.likesReceived.find(like => like.userId?.equals(toUser._id));
+        const fromUserLike = fromUser.likesReceived.find((like) =>
+          like.userId?.equals(toUser._id)
+        );
         if (fromUserLike) {
           fromUserLike.isMutual = true;
         }
@@ -334,26 +393,26 @@ class RecommendationService {
           dailyLimit: 20,
           likesUsedToday: 0,
           extraLikes: 0,
-          lastResetDate: new Date()
+          lastResetDate: new Date(),
         };
       }
       fromUser.likesLimit.likesUsedToday += 1;
 
-      await Promise.all([
-        fromUser.save(),
-        toUser.save()
-      ]);
+      await Promise.all([fromUser.save(), toUser.save()]);
 
       // Отправляем уведомление
       await notificationService.notifyLike(fromTelegramId, toTelegramId);
 
-      return { 
+      return {
         success: true,
-        remainingLikes: (fromUser.likesLimit.dailyLimit + fromUser.likesLimit.extraLikes) - fromUser.likesLimit.likesUsedToday,
-        isMutual
+        remainingLikes:
+          fromUser.likesLimit.dailyLimit +
+          fromUser.likesLimit.extraLikes -
+          fromUser.likesLimit.likesUsedToday,
+        isMutual,
       };
     } catch (error) {
-      console.error('Error liking user:', error);
+      console.error("Error liking user:", error);
       throw error;
     }
   }
@@ -363,54 +422,67 @@ class RecommendationService {
     try {
       const [fromUser, toUser] = await Promise.all([
         User.findOne({ telegramId: fromTelegramId }),
-        User.findOne({ telegramId: toTelegramId })
+        User.findOne({ telegramId: toTelegramId }),
       ]);
 
       if (!fromUser || !toUser) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
-      if (!fromUser.profile || fromUser.profile.moderationStatus !== ModerationStatus.APPROVED) {
-        throw new Error('Your profile must be approved to super like others');
+      if (
+        !fromUser.profile ||
+        fromUser.profile.moderationStatus !== ModerationStatus.APPROVED
+      ) {
+        throw new Error("Your profile must be approved to super like others");
       }
 
       // Проверяем, не лайкал ли уже этот пользователь
-      const hasLiked = fromUser.likesGiven.some(like => like.userId?.equals(toUser._id));
+      const hasLiked = fromUser.likesGiven.some((like) =>
+        like.userId?.equals(toUser._id)
+      );
       if (hasLiked) {
-        throw new Error('You have already liked this user');
+        throw new Error("You have already liked this user");
       }
 
       // Проверяем доступность суперлайков
       const canSuperLike = await this.checkSuperLikesAvailability(fromUser);
       if (!canSuperLike) {
-        throw new Error('Daily super likes limit reached. You can purchase extra super likes for stars.');
+        throw new Error(
+          "Daily super likes limit reached. You can purchase extra super likes for stars."
+        );
       }
 
       // Проверяем взаимность
-      const isMutual = toUser.likesGiven.some(like => like.userId?.equals(fromUser._id));
+      const isMutual = toUser.likesGiven.some((like) =>
+        like.userId?.equals(fromUser._id)
+      );
 
       // Добавляем суперлайк
       fromUser.likesGiven.push({
         userId: toUser._id,
-        type: 'super',
+        type: "super",
         date: new Date(),
-        isMutual
+        isMutual,
       });
 
       toUser.likesReceived.push({
         userId: fromUser._id,
-        type: 'super',
+        type: "super",
         date: new Date(),
-        isMutual
+        isMutual,
       });
 
       // Если есть взаимность, обновляем статус у существующего лайка
       if (isMutual) {
-        const toUserLike = toUser.likesGiven.find(like => like.userId?.equals(fromUser._id));
+        const toUserLike = toUser.likesGiven.find((like) =>
+          like.userId?.equals(fromUser._id)
+        );
         if (toUserLike) {
           toUserLike.isMutual = true;
         }
-        const fromUserLike = fromUser.likesReceived.find(like => like.userId?.equals(toUser._id));
+        const fromUserLike = fromUser.likesReceived.find((like) =>
+          like.userId?.equals(toUser._id)
+        );
         if (fromUserLike) {
           fromUserLike.isMutual = true;
         }
@@ -421,26 +493,26 @@ class RecommendationService {
           dailyLimit: 3,
           superLikesUsedToday: 0,
           extraSuperLikes: 0,
-          lastResetDate: new Date()
+          lastResetDate: new Date(),
         };
       }
       fromUser.superLikesLimit.superLikesUsedToday += 1;
 
-      await Promise.all([
-        fromUser.save(),
-        toUser.save()
-      ]);
+      await Promise.all([fromUser.save(), toUser.save()]);
 
       // Отправляем уведомление о суперлайке
       await notificationService.notifySuperLike(fromTelegramId, toTelegramId);
 
-      return { 
+      return {
         success: true,
-        remainingSuperLikes: (fromUser.superLikesLimit.dailyLimit + fromUser.superLikesLimit.extraSuperLikes) - fromUser.superLikesLimit.superLikesUsedToday,
-        isMutual
+        remainingSuperLikes:
+          fromUser.superLikesLimit.dailyLimit +
+          fromUser.superLikesLimit.extraSuperLikes -
+          fromUser.superLikesLimit.superLikesUsedToday,
+        isMutual,
       };
     } catch (error) {
-      console.error('Error super liking user:', error);
+      console.error("Error super liking user:", error);
       throw error;
     }
   }
@@ -450,31 +522,34 @@ class RecommendationService {
     try {
       const [fromUser, toUser] = await Promise.all([
         User.findOne({ telegramId: fromTelegramId }),
-        User.findOne({ telegramId: toTelegramId })
+        User.findOne({ telegramId: toTelegramId }),
       ]);
 
       if (!fromUser || !toUser) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       // Удаляем лайки в обоих направлениях
-      fromUser.likesGiven = fromUser.likesGiven.filter(like => !like.userId?.equals(toUser._id));
-      toUser.likesReceived = toUser.likesReceived.filter(like => !like.userId?.equals(fromUser._id));
+      fromUser.likesGiven = fromUser.likesGiven.filter(
+        (like) => !like.userId?.equals(toUser._id)
+      );
+      toUser.likesReceived = toUser.likesReceived.filter(
+        (like) => !like.userId?.equals(fromUser._id)
+      );
 
       // Если был взаимный лайк, обновляем статус у оставшегося лайка
-      const remainingLike = toUser.likesGiven.find(like => like.userId?.equals(fromUser._id));
+      const remainingLike = toUser.likesGiven.find((like) =>
+        like.userId?.equals(fromUser._id)
+      );
       if (remainingLike) {
         remainingLike.isMutual = false;
       }
 
-      await Promise.all([
-        fromUser.save(),
-        toUser.save()
-      ]);
+      await Promise.all([fromUser.save(), toUser.save()]);
 
       return { success: true };
     } catch (error) {
-      console.error('Error disliking user:', error);
+      console.error("Error disliking user:", error);
       throw error;
     }
   }
@@ -482,21 +557,23 @@ class RecommendationService {
   // Получение списка тех, кто лайкнул пользователя
   async getLikesReceived(telegramId: number) {
     try {
-      const user = await User.findOne({ telegramId })
-        .populate('likesReceived.userId', 'telegramId username firstName photoUrl profile');
-      
+      const user = await User.findOne({ telegramId }).populate(
+        "likesReceived.userId",
+        "telegramId username firstName photoUrl profile"
+      );
+
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
-      return user.likesReceived.map(like => ({
+      return user.likesReceived.map((like) => ({
         user: like.userId,
         type: like.type,
         date: like.date,
-        isMutual: like.isMutual
+        isMutual: like.isMutual,
       }));
     } catch (error) {
-      console.error('Error getting likes received:', error);
+      console.error("Error getting likes received:", error);
       throw error;
     }
   }
@@ -504,65 +581,64 @@ class RecommendationService {
   // Получение списка тех, кого пользователь лайкнул
   async getLikesGiven(telegramId: number) {
     try {
-      const user = await User.findOne({ telegramId })
-        .populate('likesGiven.userId', 'telegramId username firstName photoUrl profile');
-      
+      const user = await User.findOne({ telegramId }).populate(
+        "likesGiven.userId",
+        "telegramId username firstName photoUrl profile"
+      );
+
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
-      return user.likesGiven.map(like => ({
+      return user.likesGiven.map((like) => ({
         user: like.userId,
         type: like.type,
         date: like.date,
-        isMutual: like.isMutual
+        isMutual: like.isMutual,
       }));
     } catch (error) {
-      console.error('Error getting likes given:', error);
+      console.error("Error getting likes given:", error);
       throw error;
     }
   }
 
   // Получение информации о лайках между пользователями
-  async getLikesBetweenUsers(fromTelegramId: number, toTelegramId: number) {
+  async getLikesBetweenUsers(
+    fromTelegramId: number,
+    toTelegramId: number
+  ): Promise<{ fromUser: boolean; toUser: boolean }> {
     try {
       const [fromUser, toUser] = await Promise.all([
         User.findOne({ telegramId: fromTelegramId }),
-        User.findOne({ telegramId: toTelegramId })
+        User.findOne({ telegramId: toTelegramId }),
       ]);
 
       if (!fromUser || !toUser) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
-      // Получаем лайки от fromUser к toUser
-      const fromUserLike = fromUser.likesGiven.find(like => like.userId?.equals(toUser._id));
-      const toUserLike = toUser.likesGiven.find(like => like.userId?.equals(fromUser._id));
+      // Проверяем лайки в обоих направлениях
+      const fromUserLike = fromUser.likesGiven.some(
+        (like) =>
+          like.userId?.equals(toUser._id) &&
+          (like.type === "regular" || like.type === "super")
+      );
+
+      const toUserLike = toUser.likesGiven.some(
+        (like) =>
+          like.userId?.equals(fromUser._id) &&
+          (like.type === "regular" || like.type === "super")
+      );
 
       return {
-        likes: {
-          given: fromUserLike ? {
-            type: fromUserLike.type,
-            date: fromUserLike.date,
-            isMutual: fromUserLike.isMutual
-          } : null,
-          received: toUserLike ? {
-            type: toUserLike.type,
-            date: toUserLike.date,
-            isMutual: toUserLike.isMutual
-          } : null
-        },
-        isMutual: fromUserLike?.isMutual || false,
-        mutualType: fromUserLike?.isMutual ? {
-          fromUser: fromUserLike.type,
-          toUser: toUserLike?.type || 'none'
-        } : null
+        fromUser: fromUserLike, // true если текущий пользователь лайкнул
+        toUser: toUserLike, // true если другой пользователь лайкнул
       };
     } catch (error) {
-      console.error('Error getting likes between users:', error);
-      throw error;
+      console.error("Error getting likes between users:", error);
+      throw new Error("Failed to get likes between users");
     }
   }
 }
 
-export default new RecommendationService(); 
+export default new RecommendationService();

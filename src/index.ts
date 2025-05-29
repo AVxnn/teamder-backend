@@ -7,9 +7,11 @@ import profileRoutes from "./routes/profile"
 import moderationRoutes from "./routes/moderation"
 import notificationRoutes from "./routes/notifications"
 import recommendationRoutes from "./routes/recommendations"
+import heroesRoutes from "./routes/heroes"
 import cors from 'cors';
 import mongoose from 'mongoose';
 import paymentRoutes from './routes/payments';
+import path from 'path';
 
 dotenv.config();
 
@@ -25,6 +27,9 @@ const corsConfig = {
   credentials: true,
 }
 
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
 app.use(cors(corsConfig));
 app.use(express.json());
 
@@ -35,7 +40,7 @@ if (!mongoURI) {
 } else {
   console.log('✅ MONGO_URI найден в .env');
 }
-  
+
 async function run() {
   try {
     mongoose.set('strictQuery', true);
@@ -48,7 +53,6 @@ async function run() {
 
     console.log('✅ Connected to MongoDB');
     
-    // Тестовый запрос для проверки подключения
     if (mongoose.connection.db) {
       await mongoose.connection.db.admin().command({ ping: 1 });
       console.log("✅ MongoDB ping successful");
@@ -68,6 +72,9 @@ app.use('/api/moderation', moderationRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use("/api/heroes", heroesRoutes);
+
+app.use("/uploads", express.static(path.join(__dirname, "../static/uploads")));
 
 app.listen(port, () => {
   console.log(`🚀 Server running at http://localhost:${port}`);
